@@ -1,14 +1,12 @@
 import cv2
+import numpy
+
 from math import sqrt , pow
-import time
+from time import time ,sleep
 import torch
-import argparse
 velocity =5
-cap =cv2.VideoCapture('vf.mp4')
+cap =cv2.VideoCapture('jog.mp4')
 fps = cap.get(cv2.CAP_PROP_FPS)
-from pymavlink import mavutil
-the_connection = mavutil.mavlink_connection('udpin:127.0.0.1:14550')
-the_connection.wait_heartbeat()
 a =[]
 n =0
 x = 0
@@ -18,17 +16,13 @@ prev_po =[208,208]
 area_previous = 0 
 area_current = 0
 def PID_X(x1,y1,po):
-  propy= y1-po[1]
-  diffy = propy-prev_po[1]
-  propx = x1-po[0]
-  diffx = (propx-prev_po[0])
-  kp= 0.4
-  kd =0.4
-  total_movementy = int((kp*propy)+(kd*diffy))
-  total_movementx =int((kp*propx) + (kd*diffx))
-  prev_po[0]= propx
-  prev_po[1]=propy
-  return total_movementx , total_movementy
+  prop = x1-po[0]
+  diff = (po[0]-prev_po[0])
+  kp= 0.1
+  kd =0.5
+  total_movement =int((kp*prop) + (kd*diff))
+  prev_po[0]= po[0]
+  return total_movement
 model = torch.hub.load('ultralytics/yolov5', 'custom', path='yolov5s.pt')
 classes= model.names
 def score_frame(frame):
@@ -39,7 +33,7 @@ def score_frame(frame):
         """
         frame = [frame]
         results = model(frame)
-        #print(results.pandas().xyxy)
+        print(results.pandas().xyxy)
         labels, cord = results.xyxyn[0][:, -1], results.xyxyn[0][:, :-1]
         
         return labels, cord
@@ -74,8 +68,7 @@ def plot_boxes(results, frame):
         
         
         return frame
-    
-
+  
 while True:
     n=n+1
     success , frame = cap.read()
@@ -99,22 +92,12 @@ while True:
                     #frame = cv2.putText(frame , str(distance),((x1,y1)),cv2.FONT_HERSHEY_COMPLEX,1,(0,0,255),2)
                 l = int(((x1+x2)/2))
                 m = int(((y1+y2)/2))
-                px ,py = PID_X(l,m,po) 
+                px = PID_X(l,m,po) 
                 po[0]= int(po[0]+px)
-                po[1]= int(po[1]+py)
-                print(px)
-                if px>0:
-                    the_connection.mav.command_long_send(the_connection.target_system, the_connection.target_component,
-                                     mavutil.mavlink.MAV_CMD_CONDITION_YAW, 0, px, 0, 1, 1, 0, 0, 0)
-                    the_connection.mav.send(mavutil.mavlink.MAVLink_set_position_target_local_ned_message(10, the_connection.target_system,
-                        the_connection.target_component, mavutil.mavlink.MAV_FRAME_BODY_NED, int(0b110111000111), 0, 0, 0, 0.5, 0, 0, 0, 0, 0, 0, 0))
-
-                else :
-                    the_connection.mav.command_long_send(the_connection.target_system, the_connection.target_component,
-                                     mavutil.mavlink.MAV_CMD_CONDITION_YAW, 0, (-1*px),0, -1, 1, 0, 0, 0)
                 break    
     frame = cv2.circle(frame,(po[0],po[1]),4,(0,0,255),5)
     cv2.imshow("dasd",frame)
+    print(len(a))
     cv2.waitKey(1)        
 
 
